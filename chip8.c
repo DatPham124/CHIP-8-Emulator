@@ -102,9 +102,9 @@ int main()
 
     c.pc = 512;
 
-    uint16_t opcode, first_4_bit, second_4_bit, last_12_bit, third_4_bit, last_8_bit;
+    uint16_t opcode, first_4_bit, second_4_bit, last_12_bit, third_4_bit, last_8_bit, last_4_bit;
 
-    while(true)
+    while (true)
     {
         opcode = c.memory[c.pc];
 
@@ -116,11 +116,13 @@ int main()
 
         second_4_bit = (opcode & 0x0F00) >> 8;
 
+        third_4_bit = (opcode & 0x00F0) >> 4;
+
+        last_4_bit = (opcode & 0x000F);
+
         last_12_bit = opcode & 0x0FFF;
 
         last_8_bit = opcode & 0x00FF;
-
-        third_4_bit = (opcode & 0x00F0) >> 4;
 
         switch (first_4_bit)
         {
@@ -139,6 +141,42 @@ int main()
             c.I = last_12_bit;
             c.pc += 2;
             break;
+        case 0xD:
+            uint8_t Coordonate_x, Coordinate_y, Height, Sprite, Scanner, Target_X, Target_Y, Index;
+
+            Scanner = 0x80;
+
+            c.v[0xF] = 0;
+
+            Coordonate_x = c.v[second_4_bit];
+            Coordinate_y = c.v[third_4_bit];
+
+            Height = last_4_bit;
+
+            for (uint8_t row = 0; row < Height; row++)
+            {
+                uint8_t sprite_bytes = c.memory[c.I + row];
+                for (uint8_t col = 0; col < 8; col++)
+                {
+                    if (((Scanner >> col) & sprite_bytes) != 0)
+                    {
+                        Target_X = (Coordonate_x + col) % 64;
+                        Target_Y = (Coordinate_y + row) % 32;
+                        Index = (Target_Y * 64) + Target_X;
+
+                        if (c.gfx[Index] == 1)
+                        {
+                            c.v[0xF] = 1;
+                        }
+                        c.gfx[Index] ^= 1;
+                    }
+                    else
+                        continue;
+                }
+            }
+            c.pc += 2;
+            break;
+
         default:
             c.pc += 2;
         }
