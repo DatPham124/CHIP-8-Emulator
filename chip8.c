@@ -21,7 +21,7 @@ typedef struct
     uint8_t key[16];
 } chip8;
 
-chip8 init_start(chip8 *c)
+void init_start(chip8 *c)
 {
 
     int memory_size = 4096;
@@ -45,12 +45,9 @@ chip8 init_start(chip8 *c)
         c->stack[i] = 0;
     }
 
-    for (int i = 0; i <= 64; i++)
+    for (int i = 0; i < 2048; i++)
     {
-        for (int x = 0; x <= 32; x++)
-        {
-            c->gfx[i * x] = 0;
-        }
+        c->gfx[i] = 0;
     }
 
     c->pc = 0x200;
@@ -91,94 +88,109 @@ void read_file(char *file_name, chip8 *c)
     fclose(file_ptr);
 }
 
-int main()
+void chip8_cycle(chip8 *c)
 {
-    char *file_name = "Pong.ch8";
-
-    chip8 c;
-    init_start(&c);
-
-    read_file(file_name, &c);
-
-    c.pc = 512;
-
     uint16_t opcode, first_4_bit, second_4_bit, last_12_bit, third_4_bit, last_8_bit, last_4_bit;
 
-    while (true)
+    opcode = c->memory[c->pc];
+
+    opcode = opcode << 8;
+
+    opcode = opcode | (uint16_t)c->memory[c->pc + 1];
+
+    first_4_bit = (opcode & 0xF000) >> 12;
+
+    second_4_bit = (opcode & 0x0F00) >> 8;
+
+    third_4_bit = (opcode & 0x00F0) >> 4;
+
+    last_4_bit = (opcode & 0x000F);
+
+    last_12_bit = opcode & 0x0FFF;
+
+    last_8_bit = opcode & 0x00FF;
+
+    switch (first_4_bit)
     {
-        opcode = c.memory[c.pc];
+    case 0x1:
+        c->pc = last_12_bit;
+        break;
+    case 0x6:
+        c->v[second_4_bit] = last_8_bit;
+        c->pc += 2;
+        break;
+    case 0x7:
+        c->v[second_4_bit] += last_8_bit;
+        c->pc += 2;
+        break;
+    case 0xA:
+        c->I = last_12_bit;
+        c->pc += 2;
+        break;
+    case 0xD:
+        uint8_t Coordonate_x, Coordinate_y, Height, Sprite, Scanner, Target_X, Target_Y, Index;
 
-        opcode = opcode << 8;
+        Scanner = 0x80;
 
-        opcode = opcode | (uint16_t)c.memory[c.pc + 1];
+        c->v[0xF] = 0;
 
-        first_4_bit = (opcode & 0xF000) >> 12;
+        Coordonate_x = c->v[second_4_bit];
+        Coordinate_y = c->v[third_4_bit];
 
-        second_4_bit = (opcode & 0x0F00) >> 8;
+        Height = last_4_bit;
 
-        third_4_bit = (opcode & 0x00F0) >> 4;
-
-        last_4_bit = (opcode & 0x000F);
-
-        last_12_bit = opcode & 0x0FFF;
-
-        last_8_bit = opcode & 0x00FF;
-
-        switch (first_4_bit)
+        for (uint8_t row = 0; row < Height; row++)
         {
-        case 0x1:
-            c.pc = last_12_bit;
-            break;
-        case 0x6:
-            c.v[second_4_bit] = last_8_bit;
-            c.pc += 2;
-            break;
-        case 0x7:
-            c.v[second_4_bit] += last_8_bit;
-            c.pc += 2;
-            break;
-        case 0xA:
-            c.I = last_12_bit;
-            c.pc += 2;
-            break;
-        case 0xD:
-            uint8_t Coordonate_x, Coordinate_y, Height, Sprite, Scanner, Target_X, Target_Y, Index;
-
-            Scanner = 0x80;
-
-            c.v[0xF] = 0;
-
-            Coordonate_x = c.v[second_4_bit];
-            Coordinate_y = c.v[third_4_bit];
-
-            Height = last_4_bit;
-
-            for (uint8_t row = 0; row < Height; row++)
+            uint8_t sprite_bytes = c->memory[c->I + row];
+            for (uint8_t col = 0; col < 8; col++)
             {
-                uint8_t sprite_bytes = c.memory[c.I + row];
-                for (uint8_t col = 0; col < 8; col++)
+                if (((Scanner >> col) & sprite_bytes) != 0)
                 {
-                    if (((Scanner >> col) & sprite_bytes) != 0)
-                    {
-                        Target_X = (Coordonate_x + col) % 64;
-                        Target_Y = (Coordinate_y + row) % 32;
-                        Index = (Target_Y * 64) + Target_X;
+                    Target_X = (Coordonate_x + col) % 64;
+                    Target_Y = (Coordinate_y + row) % 32;
+                    Index = (Target_Y * 64) + Target_X;
 
-                        if (c.gfx[Index] == 1)
-                        {
-                            c.v[0xF] = 1;
-                        }
-                        c.gfx[Index] ^= 1;
+                    if (c->gfx[Index] == 1)
+                    {
+                        c->v[0xF] = 1;
                     }
-                    else
-                        continue;
+                    c->gfx[Index] ^= 1;
                 }
+                else
+                    continue;
             }
-            c.pc += 2;
+        }
+        c->pc += 2;
+        break;
+
+    case 0xF:
+        switch (last_8_bit)
+        {
+        case 0x07:
+            c->v[second_4_bit] = c->delay_timer;
+            c->pc += 2;
+            break;
+
+        case 0x15:
+            c->delay_timer = c->v[second_4_bit];
+            c->pc += 2;
+            break;
+
+        case 0x18:
+            c->sound_timer = c->v[second_4_bit];
+            c->pc += 2;
+            break;
+
+        case 0x1E:
+            c->I += c->v[second_4_bit];
+            c->pc += 2;
             break;
 
         default:
-            c.pc += 2;
+            break;
         }
+
+    default:
+        c->pc += 2;
     }
 }
